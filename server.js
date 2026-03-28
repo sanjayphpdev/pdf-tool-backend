@@ -17,6 +17,16 @@ app.use(
 const upload = multer({
   dest: "uploads/",
   limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype !== "application/pdf") {
+      return cb(new Error("Only PDFs allowed"), false);
+    }
+    cb(null, true);
+  },
+});
+
+app.get("/", (req, res) => {
+  res.send("PDF Tool API is running 🚀");
 });
 
 app.post("/protect", upload.single("pdf"), (req, res) => {
@@ -24,6 +34,10 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
 
   if (!req.file || !password) {
     return res.status(400).send("Missing file or password");
+  }
+
+  if (password.length < 4) {
+    return res.status(400).send("Password too short");
   }
 
   const input = req.file.path;
