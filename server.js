@@ -1,7 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
-const { exec } = require("child_process");
+const { exec, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 
@@ -26,6 +26,7 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
   const original = path.parse(req.file.originalname).name;
   const output = `uploads/${original}-protected.pdf`;
 
+  /* //For Windows Environment
   const command = `"C:\\Users\\sanja\\Documents\\sanjay-office\\becholor\\pdf-tool-server\\window-qpdf\\bin\\qpdf.exe" --encrypt ${safePassword} ${safePassword} 256 -- ${input} ${output}`;
   console.log(`command = ${command}`);
   exec(command, (err) => {
@@ -38,6 +39,29 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
     res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
     res.download(output, `${original}-protected.pdf`, () => {
+      fs.unlinkSync(input);
+      fs.unlinkSync(output);
+    });
+  });
+  */
+  //-- For render or live linux server
+  const process = spawn("qpdf", [
+    "--encrypt",
+    safePassword,
+    safePassword,
+    "256",
+    "--",
+    input,
+    output,
+  ]);
+
+  process.on("close", (code) => {
+    if (code !== 0) {
+      return res.status(500).send("Error protecting PDF");
+    }
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.download(output, `${original}-protected.pdf`, () => {
+      console.log(`pdf password protected successfully`);
       fs.unlinkSync(input);
       fs.unlinkSync(output);
     });
