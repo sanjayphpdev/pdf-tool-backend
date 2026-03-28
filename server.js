@@ -1,51 +1,39 @@
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
-const { exec, spawn } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const app = express();
-app.use(cors());
+
+app.use(
+  cors({
+    origin: "*",
+    exposedHeaders: ["Content-Disposition"],
+  }),
+);
 
 const upload = multer({
   dest: "uploads/",
-  limits: { fileSize: 50 * 1024 * 1024 }, //50MB
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
 
 app.post("/protect", upload.single("pdf"), (req, res) => {
-  if (!req.file.mimetype.includes("pdf")) {
-    return res.status(400).send("Only PDF files allowed");
-  }
-
   const password = req.body.password;
-  const safePassword = password.replace(/[^a-zA-Z0-9]/g, "");
+
+  if (!req.file || !password) {
+    return res.status(400).send("Missing file or password");
+  }
 
   const input = req.file.path;
 
   const original = path.parse(req.file.originalname).name;
   const output = `uploads/${original}-protected.pdf`;
 
-  /* //For Windows Environment
-  const command = `"C:\\Users\\sanja\\Documents\\sanjay-office\\becholor\\pdf-tool-server\\window-qpdf\\bin\\qpdf.exe" --encrypt ${safePassword} ${safePassword} 256 -- ${input} ${output}`;
-  console.log(`command = ${command}`);
-  exec(command, (err) => {
-    if (err) {
-      console.log(err.stack || err.message);
-      fs.unlinkSync(input);
-      return res.status(500).send("Error protecting PDF");
-    }
+  const safePassword = password.replace(/[^a-zA-Z0-9]/g, "");
 
-    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
-
-    res.download(output, `${original}-protected.pdf`, () => {
-      fs.unlinkSync(input);
-      fs.unlinkSync(output);
-    });
-  });
-  */
-  //-- For render or live linux server
-  const process = spawn("qpdf", [
+  const qpdf = spawn("qpdf", [
     "--encrypt",
     safePassword,
     safePassword,
@@ -55,13 +43,15 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
     output,
   ]);
 
-  process.on("close", (code) => {
+  qpdf.on("close", (code) => {
     if (code !== 0) {
-      return res.status(500).send("Error protecting PDF");
+      fs.unlinkSync(input);
+      return res.status(500).send("Error processing PDF");
     }
+
     res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+
     res.download(output, `${original}-protected.pdf`, () => {
-      console.log(`pdf password protected successfully`);
       fs.unlinkSync(input);
       fs.unlinkSync(output);
     });
