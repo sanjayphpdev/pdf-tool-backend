@@ -26,7 +26,7 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
   const original = path.parse(req.file.originalname).name;
   const output = `uploads/${original}-protected.pdf`;
 
-  const command = `"C:\\Users\\sanja\\Documents\\sanjay-office\\becholor\\pdf-tool-server\\qpdf\\bin\\qpdf.exe" --encrypt ${safePassword} ${safePassword} 256 -- ${input} ${output}`;
+  const command = `"C:\\Users\\sanja\\Documents\\sanjay-office\\becholor\\pdf-tool-server\\window-qpdf\\bin\\qpdf.exe" --encrypt ${safePassword} ${safePassword} 256 -- ${input} ${output}`;
   console.log(`command = ${command}`);
   exec(command, (err) => {
     if (err) {
