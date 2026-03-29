@@ -72,6 +72,37 @@ app.post("/protect", upload.single("pdf"), (req, res) => {
   });
 });
 
+app.post("/unlock", upload.single("pdf"), (req, res) => {
+  const password = req.body.password;
+
+  if (!req.file || !password) {
+    return res.status(400).send("Missing file or password");
+  }
+
+  const input = req.file.path;
+  const original = path.parse(req.file.originalname).name;
+  const output = `uploads/${original}-unlocked.pdf`;
+
+  const qpdf = spawn("qpdf", [
+    "--password=" + password,
+    "--decrypt",
+    input,
+    output,
+  ]);
+
+  qpdf.on("close", (code) => {
+    if (code !== 0) {
+      fs.unlinkSync(input);
+      return res.status(500).send("Wrong password or failed");
+    }
+
+    res.download(output, `${original}-unlocked.pdf`, () => {
+      fs.unlinkSync(input);
+      fs.unlinkSync(output);
+    });
+  });
+});
+
 app.listen(5000, () => {
   console.log("Server running on port 5000");
 });
