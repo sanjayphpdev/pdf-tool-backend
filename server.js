@@ -4,6 +4,7 @@ const cors = require("cors");
 const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
+const { compressWithQpdf } = require("./QpdfHelper");
 
 const app = express();
 
@@ -103,7 +104,7 @@ app.post("/unlock", upload.single("pdf"), (req, res) => {
   });
 });
 
-app.post("/compress", upload.single("file"), (req, res) => {
+app.post("/compress", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).send("No file uploaded");
 
   if (req.file.mimetype !== "application/pdf") {
@@ -114,42 +115,23 @@ app.post("/compress", upload.single("file"), (req, res) => {
   const original = path.parse(req.file.originalname).name;
   const outputPath = `uploads/optimized-${Date.now()}.pdf`;
 
-  // qpdf arguments (SAFE way)
-  const args = [
-    inputPath,
-    outputPath,
-    "--stream-data=compress",
-    "--object-streams=generate",
-    "--compress-streams=y",
-  ];
+  try {
+    // 🔥 Use your qpdf iterative function
 
-  const process = spawn("qpdf", args);
+    await compressWithQpdf(inputPath, outputPath, 100); // target 100KB (best effort)
 
-  // Capture errors (important)
-  let errorOutput = "";
-
-  process.stderr.on("data", (data) => {
-    errorOutput += data.toString();
-  });
-
-  process.on("error", (err) => {
-    console.error("Spawn error:", err);
-    return res.status(500).send("Failed to start compression");
-  });
-
-  process.on("close", (code) => {
-    if (code !== 0) {
-      console.error("qpdf error:", errorOutput);
-      return res.status(500).send("Compression failed");
+    // Optional safety check
+    if (!fs.existsSync(outputPath)) {
+      return res.status(500).send("Output not generated");
     }
 
     res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
     res.download(outputPath, `${original}-compressed.pdf`, (err) => {
-      // Cleanup (safe)
+      // 🧹 Cleanup
       try {
-        fs.unlinkSync(inputPath);
-        fs.unlinkSync(outputPath);
+        if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+        if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
       } catch (e) {
         console.warn("Cleanup error:", e.message);
       }
@@ -158,7 +140,16 @@ app.post("/compress", upload.single("file"), (req, res) => {
         console.error("Download error:", err);
       }
     });
-  });
+  } catch (err) {
+    console.error("Compression error:", err);
+
+    // cleanup on failure
+    try {
+      if (fs.existsSync(inputPath)) fs.unlinkSync(inputPath);
+    } catch {}
+
+    return res.status(500).send("Compression failed");
+  }
 });
 
 app.listen(5000, () => {
