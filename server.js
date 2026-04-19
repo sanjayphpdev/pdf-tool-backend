@@ -95,10 +95,42 @@ app.post("/unlock", upload.single("pdf"), (req, res) => {
       fs.unlinkSync(input);
       return res.status(500).send("Wrong password or failed");
     }
-
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
     res.download(output, `${original}-unlocked.pdf`, () => {
       fs.unlinkSync(input);
       fs.unlinkSync(output);
+    });
+  });
+});
+
+app.post("/compress", upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).send("No file uploaded");
+
+  if (req.file.mimetype !== "application/pdf") {
+    return res.status(400).send("Only PDF allowed");
+  }
+
+  const inputPath = req.file.path;
+  const original = path.parse(req.file.originalname).name;
+  const outputPath = `uploads/optimized-${Date.now()}.pdf`;
+
+  // qpdf compression / optimization
+  const command = `
+    qpdf ${inputPath} ${outputPath} \
+    --stream-data=compress \
+    --object-streams=generate \
+    --compress-streams=y
+  `;
+
+  exec(command, (error) => {
+    if (error) {
+      console.error(error);
+      return res.status(500).send("Compression failed");
+    }
+    res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
+    res.download(outputPath, `${original}-compressed.pdf`, () => {
+      fs.unlinkSync(inputPath);
+      fs.unlinkSync(outputPath);
     });
   });
 });
