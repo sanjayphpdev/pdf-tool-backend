@@ -114,23 +114,49 @@ app.post("/compress", upload.single("file"), (req, res) => {
   const original = path.parse(req.file.originalname).name;
   const outputPath = `uploads/optimized-${Date.now()}.pdf`;
 
-  // qpdf compression / optimization
-  const command = `
-    qpdf ${inputPath} ${outputPath} \
-    --stream-data=compress \
-    --object-streams=generate \
-    --compress-streams=y
-  `;
+  // qpdf arguments (SAFE way)
+  const args = [
+    inputPath,
+    outputPath,
+    "--stream-data=compress",
+    "--object-streams=generate",
+    "--compress-streams=y",
+  ];
 
-  exec(command, (error) => {
-    if (error) {
-      console.error(error);
+  const process = spawn("qpdf", args);
+
+  // Capture errors (important)
+  let errorOutput = "";
+
+  process.stderr.on("data", (data) => {
+    errorOutput += data.toString();
+  });
+
+  process.on("error", (err) => {
+    console.error("Spawn error:", err);
+    return res.status(500).send("Failed to start compression");
+  });
+
+  process.on("close", (code) => {
+    if (code !== 0) {
+      console.error("qpdf error:", errorOutput);
       return res.status(500).send("Compression failed");
     }
+
     res.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
-    res.download(outputPath, `${original}-compressed.pdf`, () => {
-      fs.unlinkSync(inputPath);
-      fs.unlinkSync(outputPath);
+
+    res.download(outputPath, `${original}-compressed.pdf`, (err) => {
+      // Cleanup (safe)
+      try {
+        fs.unlinkSync(inputPath);
+        fs.unlinkSync(outputPath);
+      } catch (e) {
+        console.warn("Cleanup error:", e.message);
+      }
+
+      if (err) {
+        console.error("Download error:", err);
+      }
     });
   });
 });
